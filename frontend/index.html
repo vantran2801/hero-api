@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Heroes API client</title>
+  <style>
+    body { font-family: system-ui, sans-serif; margin: 2rem auto; max-width: 900px; }
+    table { border-collapse: collapse; width: 100%; margin-top: 1rem; }
+    th, td { border: 1px solid #ccc; padding: .5rem; text-align: left; }
+    label { display: inline-flex; flex-direction: column; margin-right: .75rem; }
+    #message { min-height: 1.5rem; color: #9b1c1c; }
+  </style>
+</head>
+<body>
+  <h1>Heroes</h1>
+  <form id="hero-form">
+    <label>Name <input name="name" required></label>
+    <label>Age <input name="age" type="number" min="0" max="150"></label>
+    <label>Secret name <input name="secret_name" required></label>
+    <label>Team <select name="team_id" id="team-select"><option value="">No team</option></select></label>
+    <button type="submit">Add hero</button>
+  </form>
+  <p id="message" role="alert"></p>
+  <table>
+    <thead><tr><th>ID</th><th>Name</th><th>Age</th><th>Team</th><th>Status</th></tr></thead>
+    <tbody id="heroes"></tbody>
+  </table>
+  <script>
+    const API = 'http://127.0.0.1:8000/api/v1';
+    const message = document.querySelector('#message');
+    const heroesBody = document.querySelector('#heroes');
+    const teamSelect = document.querySelector('#team-select');
+
+    async function request(path, options) {
+      const response = await fetch(`${API}${path}`, options);
+      const body = await response.json().catch(() => null);
+      if (!response.ok) {
+        const detail = body && body.detail ? body.detail : `Request failed (${response.status})`;
+        throw new Error(typeof detail === 'string' ? detail : JSON.stringify(detail));
+      }
+      return body;
+    }
+
+    function renderHeroes(heroes) {
+      heroesBody.replaceChildren();
+      for (const hero of heroes) {
+        const row = document.createElement('tr');
+        for (const value of [hero.id, hero.name, hero.age ?? '', hero.team_id ?? 'No team', hero.status]) {
+          const cell = document.createElement('td');
+          cell.textContent = String(value);
+          row.appendChild(cell);
+        }
+        heroesBody.appendChild(row);
+      }
+    }
+
+    async function loadTeams() {
+      const teams = await request('/teams');
+      for (const team of teams) {
+        const option = document.createElement('option');
+        option.value = team.id;
+        option.textContent = `${team.name} (${team.headquarters})`;
+        teamSelect.appendChild(option);
+      }
+    }
+
+    async function loadHeroes() {
+      renderHeroes(await request('/heroes'));
+    }
+
+    document.querySelector('#hero-form').addEventListener('submit', async (event) => {
+      event.preventDefault();
+      const data = Object.fromEntries(new FormData(event.currentTarget));
+      if (!data.age) delete data.age;
+      else data.age = Number(data.age);
+      if (!data.team_id) delete data.team_id;
+      else data.team_id = Number(data.team_id);
+      try {
+        await request('/heroes', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify(data)
+        });
+        event.currentTarget.reset();
+        message.textContent = '';
+        await loadHeroes();
+      } catch (error) {
+        message.textContent = error.message;
+      }
+    });
+
+    Promise.all([loadTeams(), loadHeroes()]).catch(error => {
+      message.textContent = error.message;
+    });
+  </script>
+</body>
+</html>
